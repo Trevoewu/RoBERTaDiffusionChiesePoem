@@ -12,7 +12,7 @@ from transformers import RobertaTokenizerFast, RobertaForMaskedLM
 # --------------------------------------
 # 0) User Config
 # --------------------------------------
-MODEL_DIR = "weights/roberta-diffusion-16s40e"
+MODEL_DIR = "weights/roberta-diffusion-single-with-prefix"
 MAX_LEN = 256
 PREFIX_LEN = 16
 N_STEPS = 10
@@ -25,7 +25,7 @@ parser.add_argument(
     action="store_false",
     help="If set, skip creating or showing the animation.",
 )
-parser.add_argument("prompt", type=str, help="Text prompt to use as the fixed prefix.")
+parser.add_argument("prompt", type=str,help="Text prompt to use as the fixed prefix.")
 args = parser.parse_args()
 
 prompt_text = args.prompt

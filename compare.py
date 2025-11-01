@@ -248,7 +248,7 @@ def animate_both(roberta_snaps, rd_time, gpt_snaps, gt_time, mask_token):
 def main():
     p = argparse.ArgumentParser("Compare RoBERTa‐diffusion & GPT-2")
     p.add_argument("prompt", help="Prompt text for both models")
-    p.add_argument("--roberta-dir", default="weights/roberta-diffusion-16s40e")
+    p.add_argument("--roberta-dir", default="weights/bert-ancient-chinese-diffusion-with-prefix")
     p.add_argument("--max-len", type=int, default=256)
     p.add_argument("--prefix-len", type=int, default=16)
     p.add_argument("--n-steps", type=int, default=10)

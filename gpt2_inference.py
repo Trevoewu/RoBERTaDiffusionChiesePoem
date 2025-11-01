@@ -5,7 +5,7 @@ from transformers import GPT2TokenizerFast, GPT2LMHeadModel
 
 # 1) Parse command-line
 if len(sys.argv) < 2:
-    print('Usage: python gpt2_generate_debug.py "<YOUR PROMPT HERE>"')
+    print('Usage: python gpt2_inference.py "<YOUR PROMPT HERE>"')
     sys.exit(1)
 prompt_text = sys.argv[1]
 

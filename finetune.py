@@ -2,35 +2,47 @@ import os
 import torch
 from datasets import load_dataset
 from transformers import (
-    RobertaTokenizerFast,
-    RobertaForMaskedLM,
+    RobertaTokenizerFast,  # <-- Change this
+    RobertaForMaskedLM,      # <-- Change this
     Trainer,
     TrainingArguments,
 )
 
+
 # 1) Hyperparameters
 N_STEPS = 10
-NUM_EPOCHS = 30
+NUM_EPOCHS = 80
 BATCH_SIZE = 16
 MAX_LEN = 256
-PREFIX_LEN = 16
+PREFIX_LEN = 4
+MODEL_DIR = "weights/roberta-diffusion-single-with-prefix"
+SAVE_DIR = "weights/roberta"
 
 # linearly spaced mask probabilities from 1/N_STEPS → 1.0
 mask_probs = [(i + 1) / N_STEPS for i in range(N_STEPS - 1, -1, -1)]
 
-# 2) Load WikiText-2 and drop empty lines
-dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
+# 2) Load Chinese-Poems and drop empty lines
+
+dataset = load_dataset("larryvrh/Chinese-Poems")
+# only keep 唐代 and 宋代 poems for training
+dataset['train'] = dataset['train'].filter(
+    lambda ex: ex["dynasty"] in ["唐代", "宋代"])  
+
+dataset['train'], dataset['validation'] = dataset['train'].train_test_split(
+    test_size=0.1).values()
 for split in ["train", "validation"]:
-    dataset[split] = dataset[split].filter(lambda ex: ex["text"].strip() != "")
+    dataset[split] = dataset[split].filter(
+        lambda ex: ex["content"].strip() != "")
 
 # 3) Tokenizer
-tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+tokenizer = RobertaTokenizerFast.from_pretrained(
+    MODEL_DIR)
 tokenizer.model_max_length = MAX_LEN  # just to be safe
 
 
 def tokenize_function(examples):
     return tokenizer(
-        examples["text"],
+        examples["content"],
         max_length=MAX_LEN,
         truncation=True,
         padding=False,
@@ -41,7 +53,7 @@ def tokenize_function(examples):
 tokenized = dataset.map(
     tokenize_function,
     batched=True,
-    remove_columns=["text"],
+    remove_columns=dataset["train"].column_names,
 )
 
 
@@ -52,11 +64,13 @@ def group_texts(examples):
     total_length = (total_length // MAX_LEN) * MAX_LEN
 
     result = {
-        k: [concatenated[k][i : i + MAX_LEN] for i in range(0, total_length, MAX_LEN)]
+        k: [concatenated[k][i: i + MAX_LEN]
+            for i in range(0, total_length, MAX_LEN)]
         for k in concatenated.keys()
     }
     # Since no padding, attention_mask is all 1's
-    result["attention_mask"] = [[1] * MAX_LEN for _ in range(len(result["input_ids"]))]
+    result["attention_mask"] = [
+        [1] * MAX_LEN for _ in range(len(result["input_ids"]))]
     return result
 
 
@@ -67,7 +81,7 @@ tokenized = tokenized.map(
 )
 
 # 6) Instantiate a single RoBERTaForMaskedLM
-model = RobertaForMaskedLM.from_pretrained("roberta-base")
+model = RobertaForMaskedLM.from_pretrained(MODEL_DIR)
 
 
 # 7) Custom collator that:
@@ -94,7 +108,8 @@ def diffusion_collator(features):
     labels = batch_input_ids.clone()  # shape (B, MAX_LEN)
 
     # 7a) Sample mask probability p for this batch
-    p = float(mask_probs[torch.randint(low=0, high=len(mask_probs), size=(1,))])
+    p = float(mask_probs[torch.randint(
+        low=0, high=len(mask_probs), size=(1,))])
     # (Option: sample uniformly continuous p = torch.rand(1).item())
 
     B, L = batch_input_ids.shape  # L should equal MAX_LEN
@@ -109,7 +124,8 @@ def diffusion_collator(features):
 
     # Build a broadcasted row-vector [0, 1, 2, ..., L-1] < PREFIX_LEN
     device = batch_input_ids.device
-    pos_idxs = torch.arange(L, device=device).unsqueeze(0).expand(B, L)  # shape (B, L)
+    pos_idxs = torch.arange(L, device=device).unsqueeze(
+        0).expand(B, L)  # shape (B, L)
     is_prefix = pos_idxs < PREFIX_LEN  # True for positions 0..PREFIX_LEN-1
 
     # Combine to get mask_candidate = everything that *can* be masked:
@@ -138,7 +154,7 @@ def diffusion_collator(features):
 
 # 8) Training arguments
 training_args = TrainingArguments(
-    output_dir="roberta-diffusion-single-with-prefix",
+    output_dir=SAVE_DIR,
     overwrite_output_dir=True,
     num_train_epochs=NUM_EPOCHS,
     per_device_train_batch_size=BATCH_SIZE,
@@ -160,8 +176,8 @@ trainer = Trainer(
 
 # 10) Train & save
 trainer.train()
-trainer.save_model("roberta-diffusion-single-with-prefix")
-tokenizer.save_pretrained("roberta-diffusion-single-with-prefix")
+trainer.save_model(SAVE_DIR)
+tokenizer.save_pretrained(SAVE_DIR)
 
 print("Finished diffusion‐style finetuning with first 64 tokens never masked\n")
 
