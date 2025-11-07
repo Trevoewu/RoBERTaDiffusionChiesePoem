@@ -37,6 +37,7 @@ uv sync
 - Datasets 3.6.0
 - Matplotlib 3.10.3
 - Accelerate 1.7.0
+- swanlab 
 
 ## Usage
 

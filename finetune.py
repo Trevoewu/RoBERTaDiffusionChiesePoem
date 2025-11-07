@@ -16,7 +16,7 @@ BATCH_SIZE = 16
 MAX_LEN = 256
 PREFIX_LEN = 16 # first PREFIX_LEN tokens will never be masked
 MODEL_DIR = "hfl/chinese-roberta-wwm-ext-large"
-SAVE_DIR = "weights/roberta-diffusion-mordern-chinese-poetry-with-prefix-300"
+SAVE_DIR = "weights/diffusion-style-mordern-chinese-poetry-great-try"
 DATASET_NAME = "l0ulan/chinese_modern_poems"
 """
 example data set entry:
@@ -178,6 +178,8 @@ training_args = TrainingArguments(
     save_strategy="epoch",
     save_total_limit=1,
     logging_steps=200,
+    report_to="swanlab",
+    run_name=SAVE_DIR.replace("/", "-"),
     # You can also add gradient_accumulation_steps or increase max_steps if desired
 )
 
