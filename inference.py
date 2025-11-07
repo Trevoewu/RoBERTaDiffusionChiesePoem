@@ -6,15 +6,15 @@ import random
 import math
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-
-from transformers import RobertaTokenizerFast, RobertaForMaskedLM
+# from transformers import AutoTokenizer, AutoModelForMaskedLM
+from transformers import AutoTokenizer, AutoModelForMaskedLM
 
 # --------------------------------------
 # 0) User Config
 # --------------------------------------
-MODEL_DIR = "weights/roberta-diffusion-single-with-prefix"
+MODEL_DIR = "weights/roberta-diffusion-mordern-chinese-poetry-with-prefix-300"
 MAX_LEN = 256
-PREFIX_LEN = 16
+PREFIX_LEN = 21
 N_STEPS = 10
 
 parser = argparse.ArgumentParser(
@@ -81,8 +81,8 @@ def top_k_top_p_filtering(
 # 1) Load tokenizer & model from disk
 # --------------------------------------
 print("[INFO] Loading RoBERTa tokenizer and model…")
-tokenizer = RobertaTokenizerFast.from_pretrained(MODEL_DIR)
-model = RobertaForMaskedLM.from_pretrained(MODEL_DIR)
+tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
+model = AutoModelForMaskedLM.from_pretrained(MODEL_DIR)
 model.to(DEVICE)
 model.eval()
 
@@ -100,6 +100,10 @@ encoding = tokenizer(
     return_tensors="pt",
 )
 input_ids_prompt = encoding["input_ids"].squeeze(0)  # shape: (L_p,)
+tokens = tokenizer.convert_ids_to_tokens(input_ids_prompt)
+print(len(input_ids_prompt))
+print(tokens)
+print('first16:', tokens[:16])
 
 # --------------------------------------
 # 3) Truncate or pad the prompt to exactly PREFIX_LEN tokens
@@ -112,8 +116,10 @@ pad_id = (
 L_p = input_ids_prompt.size(0)
 
 if L_p >= PREFIX_LEN:
-    # Truncate to first PREFIX_LEN tokens
-    context_ids = input_ids_prompt[:PREFIX_LEN].clone()
+    # Preserve [CLS] while keeping the last PREFIX_LEN-1 tokens (so the tail of the prompt is intact)
+    cls_token = input_ids_prompt[:1]
+    tail_tokens = input_ids_prompt[-(PREFIX_LEN - 1):] if PREFIX_LEN > 1 else torch.empty(0, dtype=torch.long)
+    context_ids = torch.cat([cls_token, tail_tokens], dim=0)
 else:
     # Left-pad with <pad> so length == PREFIX_LEN
     num_left_pad = PREFIX_LEN - L_p
@@ -194,7 +200,7 @@ for p_mask in mask_probs:
                 tokenizer.decode(
                     current_ids[0],
                     skip_special_tokens=False,
-                    clean_up_tokenization_spaces=True,
+                    clean_up_tokenization_spaces=False,
                 )[3:]
             )
         break
@@ -221,7 +227,7 @@ for p_mask in mask_probs:
             tokenizer.decode(
                 current_ids[0],
                 skip_special_tokens=False,
-                clean_up_tokenization_spaces=True,
+                clean_up_tokenization_spaces=False,
             )[3:]
         )
 
@@ -237,7 +243,7 @@ print(f"[INFO] Denoising loop took {elapsed:.2f} seconds")
 print("\n=== Final Output ===")
 decoded_tokens = tokenizer.convert_ids_to_tokens(current_ids[0].detach().cpu().tolist())
 decoded = tokenizer.decode(
-    current_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=True
+    current_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=False
 )
 print(decoded.replace(tokenizer.mask_token, "_____"))
 print("====================\n")

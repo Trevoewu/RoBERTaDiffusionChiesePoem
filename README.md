@@ -91,7 +91,7 @@ python finetune.py
 ```
 
 **Training Details:**
-- Dataset: WikiText-2 (configurable)
+- Dataset: Chinses Poems (configurable)
 - Epochs: 30 (default)
 - Batch size: 16
 - Custom diffusion collator with variable masking
@@ -108,3 +108,12 @@ RoBERTaDiffusion/
     pyproject.toml          # Dependencies
     weights/                # Pre-trained models
 ```
+
+## step 
+
+1. load the dataset 
+2. filter out the empty lines 
+3. tokenized the content
+4. concat all tokenized poems into a long token sequence 
+5. group it into MAX_LEN chunck.
+6. 

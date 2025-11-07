@@ -1,48 +1,65 @@
 import os
 import torch
 from datasets import load_dataset
+from transformers import AutoTokenizer, AutoModelForMaskedLM
 from transformers import (
-    RobertaTokenizerFast,  # <-- Change this
-    RobertaForMaskedLM,      # <-- Change this
+    # RobertaTokenizerFast,  # <-- Change this
+    # RobertaForMaskedLM,      # <-- Change this
     Trainer,
     TrainingArguments,
 )
 
-
 # 1) Hyperparameters
 N_STEPS = 10
-NUM_EPOCHS = 80
+NUM_EPOCHS = 300
 BATCH_SIZE = 16
 MAX_LEN = 256
-PREFIX_LEN = 4
-MODEL_DIR = "weights/roberta-diffusion-single-with-prefix"
-SAVE_DIR = "weights/roberta"
+PREFIX_LEN = 16 # first PREFIX_LEN tokens will never be masked
+MODEL_DIR = "hfl/chinese-roberta-wwm-ext-large"
+SAVE_DIR = "weights/roberta-diffusion-mordern-chinese-poetry-with-prefix-300"
+DATASET_NAME = "l0ulan/chinese_modern_poems"
+"""
+example data set entry:
+{"title": "秋江的晚上", "author": "刘大白", "content": "归巢的鸟儿，\n\n尽管是倦了，\n\n还驮着斜阳回去。\n\n双翅一翻，\n\n把斜阳掉在江上；\n\n头白的芦苇，\n\n也妆成一瞬的红颜了。"}
+"""
 
 # linearly spaced mask probabilities from 1/N_STEPS → 1.0
 mask_probs = [(i + 1) / N_STEPS for i in range(N_STEPS - 1, -1, -1)]
 
 # 2) Load Chinese-Poems and drop empty lines
 
-dataset = load_dataset("larryvrh/Chinese-Poems")
-# only keep 唐代 and 宋代 poems for training
-dataset['train'] = dataset['train'].filter(
-    lambda ex: ex["dynasty"] in ["唐代", "宋代"])  
+dataset = load_dataset(DATASET_NAME)
 
 dataset['train'], dataset['validation'] = dataset['train'].train_test_split(
     test_size=0.1).values()
+# drop empty line 
 for split in ["train", "validation"]:
     dataset[split] = dataset[split].filter(
         lambda ex: ex["content"].strip() != "")
 
+
+def format_poem(example):
+    lines = [line.strip() for line in example["content"].splitlines() if line.strip()]
+    example["content"] = "/".join(lines)
+    return example
+
+
+dataset = dataset.map(format_poem)
+
+print(f"Training on {len(dataset['train'])} samples.")
+print(f"Validating on {len(dataset['validation'])} samples.")
+print("Sample poem content:")
+print(dataset['train'][0]['content'])
+
 # 3) Tokenizer
-tokenizer = RobertaTokenizerFast.from_pretrained(
-    MODEL_DIR)
+tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
 tokenizer.model_max_length = MAX_LEN  # just to be safe
 
 
 def tokenize_function(examples):
+
     return tokenizer(
-        examples["content"],
+        text=examples["content"],
         max_length=MAX_LEN,
         truncation=True,
         padding=False,
@@ -81,7 +98,7 @@ tokenized = tokenized.map(
 )
 
 # 6) Instantiate a single RoBERTaForMaskedLM
-model = RobertaForMaskedLM.from_pretrained(MODEL_DIR)
+model = AutoModelForMaskedLM.from_pretrained(MODEL_DIR)
 
 
 # 7) Custom collator that:
@@ -104,7 +121,7 @@ def diffusion_collator(features):
         [f["attention_mask"] for f in features], dtype=torch.long
     )  # shape (B, MAX_LEN)
 
-    # Clone to be labels; we'll set unmasked → -100 later
+    
     labels = batch_input_ids.clone()  # shape (B, MAX_LEN)
 
     # 7a) Sample mask probability p for this batch
@@ -203,7 +220,7 @@ masked_str = tokenizer.decode(
 
 pred_str = tokenizer.decode(
     pred_ids[0],
-    skip_special_tokens=True,
+    skip_special_tokens=False,
     clean_up_tokenization_spaces=False,
 )
 
