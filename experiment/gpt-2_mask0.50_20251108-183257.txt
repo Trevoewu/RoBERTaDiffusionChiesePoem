@@ -1,0 +1,5 @@
+Model: GPT-2
+Device: cuda
+Mask ratio: 0.50
+Total masked tokens: 8290
+Token accuracy: 7.07%

@@ -1,0 +1,5 @@
+Model: Diffusion
+Device: cuda
+Mask ratio: 0.60
+Total masked tokens: 9950
+Token accuracy: 20.21%
