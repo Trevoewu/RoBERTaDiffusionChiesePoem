@@ -4,17 +4,36 @@ import time
 import torch
 import random
 import math
+import os
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+from matplotlib.animation import FuncAnimation, PillowWriter
+from matplotlib import rcParams, font_manager
+
+FONT_FALLBACKS = [
+    "Noto Sans CJK SC",
+    "Source Han Sans SC",
+    "Noto Sans SC",
+    "SimHei",
+    "WenQuanYi Micro Hei",
+    "Microsoft YaHei",
+    "Arial Unicode MS",
+    "STHeiti",
+    "DejaVu Sans",
+]
+rcParams["axes.unicode_minus"] = False
+ACTIVE_FONT = None
 # from transformers import AutoTokenizer, AutoModelForMaskedLM
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
 # --------------------------------------
 # 0) User Config
 # --------------------------------------
-MODEL_DIR = "weights/roberta-diffusion-mordern-chinese-poetry-with-prefix-300"
+MODEL_DIR = "weights/diffusion-style-mordern-chinese-poetry-great-try"
 MAX_LEN = 256
-PREFIX_LEN = 21
+PREFIX_LEN = 16
 N_STEPS = 10
 
 parser = argparse.ArgumentParser(
@@ -25,11 +44,58 @@ parser.add_argument(
     action="store_false",
     help="If set, skip creating or showing the animation.",
 )
+parser.add_argument(
+    "--animation-output",
+    type=str,
+    default="inference_animation.gif",
+    help="Path to save the animation when enabled.",
+)
+parser.add_argument(
+    "--font-path",
+    type=str,
+    default=None,
+    help="Optional path to a TTF/OTF font supporting CJK characters.",
+)
 parser.add_argument("prompt", type=str,help="Text prompt to use as the fixed prefix.")
 args = parser.parse_args()
 
 prompt_text = args.prompt
 animate = not args.animation
+
+
+def configure_fonts(preferred_path: str | None) -> str | None:
+    if preferred_path and os.path.isfile(preferred_path):
+        try:
+            font_manager.fontManager.addfont(preferred_path)
+            prop = font_manager.FontProperties(fname=preferred_path)
+            name = prop.get_name()
+            rcParams["font.family"] = [name]
+            rcParams["font.sans-serif"] = [name] + FONT_FALLBACKS
+            return name
+        except Exception as exc:  # noqa: BLE001
+            print(f"[WARN] Failed to load font from {preferred_path}: {exc}")
+
+    for candidate in FONT_FALLBACKS:
+        try:
+            found_path = font_manager.findfont(candidate, fallback_to_default=False)
+        except Exception:  # noqa: BLE001
+            continue
+        if not found_path:
+            continue
+        try:
+            prop = font_manager.FontProperties(fname=found_path)
+            name = prop.get_name()
+        except Exception:  # noqa: BLE001
+            name = candidate
+        rcParams["font.family"] = [name]
+        rcParams["font.sans-serif"] = [name] + FONT_FALLBACKS
+        return name
+
+    print("[WARN] No CJK-capable font found; glyph warnings may occur.")
+    return None
+
+
+ACTIVE_FONT = configure_fonts(args.font_path)
 
 if torch.backends.mps.is_available() and torch.backends.mps.is_built():
     DEVICE = torch.device("mps")
@@ -161,7 +227,7 @@ if animate:
     snapshots = [
         tokenizer.decode(
             current_ids[0], skip_special_tokens=False, clean_up_tokenization_spaces=True
-        )[3:]
+        )[:]
     ]
 
 # Start timing right before the denoising loop
@@ -245,7 +311,7 @@ decoded_tokens = tokenizer.convert_ids_to_tokens(current_ids[0].detach().cpu().t
 decoded = tokenizer.decode(
     current_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=False
 )
-print(decoded.replace(tokenizer.mask_token, "_____"))
+print(decoded.replace(tokenizer.mask_token, "__"))
 print("====================\n")
 
 # --------------------------------------
@@ -255,7 +321,7 @@ if animate:
     # Convert each snapshot → a concatenated, wrapped string
     all_text_snapshots = []
     for snap in snapshots:
-        all_text_snapshots.append(snap.replace("<mask>", " ____"))
+        all_text_snapshots.append(snap.replace(tokenizer.mask_token, "__"))
 
     # Build the figure
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -265,9 +331,14 @@ if animate:
     # Adjust these percentages to change the margin size:
     plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
 
+    preferred_font = ACTIVE_FONT
+    if not preferred_font:
+        preferred_font = rcParams.get("font.family", "sans-serif")
+        if isinstance(preferred_font, (list, tuple)):
+            preferred_font = preferred_font[0] if preferred_font else "sans-serif"
     fontdict = {
-        "family": "monospace",
-        "fontsize": 10,
+        "family": preferred_font,
+        "fontsize": 20,
     }
 
     def update(frame_idx):
@@ -301,4 +372,9 @@ if animate:
     )
 
     plt.tight_layout()
-    plt.show()
+    output_path = args.animation_output
+    fps = max(1, int(1000 / 500))
+    writer = PillowWriter(fps=fps)
+    anim.save(output_path, writer=writer)
+    print(f"[INFO] Animation saved to {os.path.abspath(output_path)}")
+    plt.close(fig)
