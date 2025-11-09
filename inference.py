@@ -109,7 +109,7 @@ else:
 
 
 # =============================================================================
-# Minimal top-k / top-p (nucleus) filtering function (identical to your inference.py)
+# Minimal top-k / top-p (nucleus) filtering function 
 # -----------------------------------------------------------------------------
 def top_k_top_p_filtering(
     logits: torch.Tensor,
@@ -152,7 +152,7 @@ model = AutoModelForMaskedLM.from_pretrained(MODEL_DIR)
 model.to(DEVICE)
 model.eval()
 
-# Capture the literal string used for the mask token (e.g. "<mask>")
+# Capture the literal string used for the mask token (e.g. "[MASK]")
 mask_str = tokenizer.mask_token
 
 # --------------------------------------
@@ -267,7 +267,7 @@ for p_mask in mask_probs:
                     current_ids[0],
                     skip_special_tokens=False,
                     clean_up_tokenization_spaces=False,
-                )[3:]
+                )[:]
             )
         break
 
@@ -294,7 +294,7 @@ for p_mask in mask_probs:
                 current_ids[0],
                 skip_special_tokens=False,
                 clean_up_tokenization_spaces=False,
-            )[3:]
+            )[:]
         )
 
 # End timing immediately after the denoising loop
