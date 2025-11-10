@@ -18,11 +18,13 @@
 大语言模型(LLM)是一种生成式模型，通过学习大量的文本获取知识，生成与人类语言极为相似的文本。在训练过程中，LLM尝试去拟合真实语言的分布 $p_{data}(\cdot)$ ,让自己的模型分布 $p_{\theta}(\cdot)$  （其中 $\theta$ 是参数）最大限度地贴近实际语言数据的概率分布。
 
 在训练过程中，LLM 用最大似然估计（maximum likelihood estimation, MLE）的方法调整参数，也就是不断优化模型，以使自己生成的数据在实际文本数据集出现的概率最高。数学表达就是：
+
 $$
 \max_{\theta} \mathbb{E}_{p_{data}(x)} \left[ \log p_{\theta}(x) \right] 
 $$
 
 上述最大似然估计本质上等价于最小化真实分布与模型分布之间的 KL 散度：
+
 $$
 \min_{\theta} \text{KL}(p_{data}(x) \parallel p_{\theta}(x))
 $$
@@ -128,7 +130,8 @@ Diffusion在视觉上的成功支持了这一说法”。扩散模型在图像�
 DBP是一个masked diffusion model, 使用带前缀，Diffusion 式的采样进行微调训练。使其在获得较不错文本生成的同时保留其指令遵守能力。在预训练过程中，以线性比例 $t\in U[0,1]$ 对部分token进行掩码处理。对前缀部分，特殊token不作掩码，来保留其指令遵循能力。在微调阶段(sft)，该模型模拟从完全掩蔽（t=1）到无掩蔽（t=0）的扩散过程，逐渐预测所有掩码。
 
 ![imgae-1](./image/image-1.png)
-<!-- 重绘这张图， -->
+<!-- 重绘这张图: 准确的来说，我们结合了pre-training and sft stage. that is training on mask ratio (0~1) while remaining the prompt unmasked. -->
+
 上图来自论文[1],阐述了BertDiffusion的预训练和SFT以及采样的过程。
 
 当前我们设置了10个扩散步骤，因此每批次会从掩码概率表mask_probs（1.0, 0.9, 0.9, …, 0.1）中随机选取一个百分比p，并按该比例对token进行掩码处理。自定义的diffusion_collator函数会为每批次从mask_probs中抽取一个掩码概率p，并以概率p将每个token替换为`[MASK]`标记。
@@ -136,6 +139,16 @@ DBP是一个masked diffusion model, 使用带前缀，Diffusion 式的采样进�
 为保留其promot fellow能力，我们始终保留前16个token不做掩码。这意味着在训练过程中，每个扩散步骤都将始终以前16个token作为上下文。
 
 在推理过程中，我们从大小为256的张量输入开始（因为要生成256个标记块）。前16个位置对应prompt文本的token ID，后240个位置均为`[MASK]`标记。我们按照去噪调度表进行迭代，每一步生成预测结果后重新对序列进行掩码处理。具体流程如下：
+
+```
+Step 0: [PREFIX] <mask> <mask> <mask> <mask> <mask> ...     (100% masked)
+Step 1: [PREFIX] will <mask> over <mask> control ...        (90% masked)
+Step 2: [PREFIX] will begin <mask> greater control ...      (80% masked)
+...
+Step 10: [PREFIX] will begin to assert greater control ...  (0% masked - DONE)
+```
+
+
 
 ## Dataset
 
@@ -163,6 +176,15 @@ Poem Completion Task with 100 Chinese Modern Poems
 | 0.40 | 9.27 | **35.31** |
 | 0.50 | 7.07 | **26.25** |
 | 0.60 | 5.11 | **20.21** |
+
+
+## Conclusion
+
+我们发现，像BERT这类最初为填空任务设计的掩码语言模型，可以通过将可变速率掩码解释为离散扩散过程，转化为完全生成式引擎。通过逐步用`[MASK]`标记破坏文本，并训练模型在不断增强的掩码强度下迭代去噪，我们有效将标准MLM目标转化为分步生成程序。
+
+即使不作架构调整，仅需对训练目标稍作修改，微调后的BERT就能生成语义连贯的文本，这验证了BERT类模型本质上只是在单一掩码率上训练的文本扩散模型的观点。
+
+待补充...
 
 ## Installation
 
@@ -261,7 +283,7 @@ RoBERTaDiffusion/
 
 代码基于[nathan-barry/RoBERTaDiffusion](https://github.com/nathan-barry/RoBERTaDiffusion) — A research project exploring diffusion-based text generation using RoBERTa.
 
-## References. 
+## References
 
 1. [DiffusionBERT: Improving Generative Masked Language Models with Diffusion Models (He et al., 2022)](https://arxiv.org/abs/2211.15029)
 2. [Large Language Diffusion Models (Nie et al., 2025)](https://arxiv.org/abs/2502.09992)
