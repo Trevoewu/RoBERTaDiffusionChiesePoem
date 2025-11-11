@@ -1,3 +1,5 @@
+![alt text](image-9.png)
+
 # DiffusionBert with Prefix 
 
 ![inference animation](inference_animation.gif)
